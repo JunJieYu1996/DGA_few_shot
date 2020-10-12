@@ -1,4 +1,5 @@
 from data_processor import *
+from LSTM_models import *
 from models import *
 
 import sys
@@ -26,12 +27,12 @@ class Trainer:
         self.train_loader = None
         self.test_loader = None
         self._setup_data()
-        self.model = SiameseNet(vocab_size=self.char_size).to(self.device)
+        self.model = SiameseNet_LSTM(vocab_size=self.char_size).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
     def _setup_data(self):
-        train_set = Pair_Loader(self.train_data, base_num=2000, few_shot=True)
-        test_set = Pair_Loader(self.test_data,base_num=200, few_shot=False)
+        train_set = Pair_Loader(self.train_data, base_num=len(self.train_data))
+        test_set = Pair_Loader(self.test_data,base_num=len(self.test_data))
         print('Train label distribution:')
         train_set.get_label_freq()
         print('Test label distribution:')
@@ -78,6 +79,7 @@ class Trainer:
         best_acc = 0.0
         for epoch in range(100):
             total_loss = 0.0
+            print("for epoch..." + str(epoch))
             self.model.train()
             for x_left, x_right, y_batch in self.train_loader:
                 #print('=', flush=True, end='')
@@ -108,7 +110,7 @@ def main():
     char_dict = pickle.load(f)
     f.close()
     char_size = len(char_dict.items())
-    train_data, test_data = split_train_test()
+    train_data, test_data, _ = split_train_test_2()
     trainer = Trainer(train_data, test_data, char_size)
     trainer.train()
 
