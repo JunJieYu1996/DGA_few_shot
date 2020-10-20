@@ -6,6 +6,33 @@ import torch
 from torch.utils.data import Dataset, DataLoader, RandomSampler
 import pandas as pd
 
+def collate_fn_4(batch):
+    left_lens = [i['left'].shape[0] for i in batch]
+    right_lens = [i['right'].shape[0] for i in batch]
+    bsz, max_right_len, max_left_len = len(batch),  max(right_lens), max(left_lens)
+
+    left_tensor = torch.zeros(bsz, 50, dtype=torch.long)
+    right_tensor = torch.zeros(bsz, 50, dtype=torch.long)
+    label_tensor = torch.Tensor([i['label'] for i in batch])
+
+    for b_ix, b in enumerate(batch):
+        left_tensor[b_ix, :b['left'].shape[0]] = b['left'].unsqueeze(0)
+        right_tensor[b_ix, :b['right'].shape[0]] = b['right'].unsqueeze(0)
+
+    return left_tensor, right_tensor, label_tensor, left_lens, right_lens
+
+def collate_fn_3(batch):
+    lens = [i[1].shape[0] for i in batch]
+    bsz, max_len = len(batch),  max(lens)
+
+    data_tensor = torch.zeros(bsz, 50, dtype=torch.long)
+    label_tensor = torch.Tensor([i[0] for i in batch])
+
+    for b_ix, b in enumerate(batch):
+        data_tensor[b_ix, :b[1].shape[0]] = b[1].unsqueeze(0)
+
+    return data_tensor, label_tensor, lens
+
 def collate_fn_2(batch):
     lens = [i[1].shape[0] for i in batch]
     bsz, max_len = len(batch),  max(lens)
@@ -18,30 +45,48 @@ def collate_fn_2(batch):
 
     return data_tensor, label_tensor
 
+def collate_fn(batch):
+    left_lens = [i['left'].shape[0] for i in batch]
+    right_lens = [i['right'].shape[0] for i in batch]
+    bsz, max_right_len, max_left_len = len(batch),  max(right_lens), max(left_lens)
+
+    left_tensor = torch.zeros(bsz, max(left_lens), dtype=torch.long)
+    right_tensor = torch.zeros(bsz, max(right_lens), dtype=torch.long)
+    label_tensor = torch.Tensor([i['label'] for i in batch])
+
+    for b_ix, b in enumerate(batch):
+        left_tensor[b_ix, :b['left'].shape[0]] = b['left'].unsqueeze(0)
+        right_tensor[b_ix, :b['right'].shape[0]] = b['right'].unsqueeze(0)
+
+    return left_tensor, right_tensor, label_tensor
+
 def split_train_test():
     door_number = 100
-    split_number = int(door_number * 0.8)
-    class_limit = 10
-    # names = ["banjori","emotet","pykspa","rovnix","tinba"]
-    # '''
-    names = []
-    i = 0
-    f = open("token_overview.txt", "r")
-    for line in f.readlines():
-        elements = line.split()
-        if int(elements[2]) > door_number:
-            names.append(elements[1])
-            i = i + 1
-        if i == class_limit:
-            break
-    f.close()
-    # '''
-
+    #split_number = int(door_number * 0.8)
+    #'suppobox','banjori','cryptolocker','normal'
+    support_class = []
+    val_class = ['suppobox','normal']
+    #print(val_class)
     train_data = []
     test_data = []
     i = 0
-    for name in names:
-        full_name = "./data/dga_tokens/" + name + ".txt.pkl"
+    if len(support_class)!=0:
+        for single_class in support_class:
+            full_name = "./data/dga_tokens/" + single_class+ ".txt.pkl"
+            f = open(full_name, "rb")
+            token = pickle.load(f)
+            change_token = []
+            for _ in token:
+                change_token.append((i, _[1]))
+            random.shuffle(change_token)
+            new_token = change_token[:door_number]
+            train_data.extend(new_token)
+            i = i + 1
+            f.close()
+
+    i = 0
+    for single_class in val_class:
+        full_name = "./data/dga_tokens/" + single_class+ ".txt.pkl"
         f = open(full_name, "rb")
         token = pickle.load(f)
         change_token = []
@@ -49,20 +94,18 @@ def split_train_test():
             change_token.append((i, _[1]))
         random.shuffle(change_token)
         new_token = change_token[:door_number]
-        train_data.extend(new_token[:split_number])
-        test_data.extend(new_token[split_number:])
+        if door_number>len(change_token):
+            append_new_token = change_token[:(door_number-len(change_token))]
+            new_token.extend(append_new_token)
+        test_data.extend(new_token)
         i = i + 1
         f.close()
-    print(names)
+    print(support_class)
+    print(val_class)
     print("door number:" + str(door_number))
-    print("split number:" + str(split_number))
     print("---------------------------------")
-    print("class num: " + str(i))
-    print("total num: " + str(i * door_number))
-    print("train_num: " + str(i * split_number))
-    print("test_num: " + str(i * (door_number-split_number)))
 
-    return train_data, test_data, len(names)
+    return train_data, test_data, 2
 
 def split_train_test_2():
     door_number = 100
@@ -85,14 +128,16 @@ def split_train_test_2():
     random.shuffle(names)
 
     '''
-    ['qadars']
-    ['ramnit', 'banjori', 'pykspa', 'gameover', 'locky', 'necurs', 'normal', 'ranbyus', 'emotet', 'murofet']
+    ['fobber', 'bigviktor', 'ramnit', 'shiotob', 'ranbyus', 'banjori', 'gameover', 'shifu', 'symmi', 'padcrypt', 'nymaim','rovnix', 'dircrypt', 'necurs', 'simda', 'qadars', 'feodo', 'bamital', 'enviserv', 'chinad']
+    ['pykspa', 'emotet', 'conficker', 'locky', 'cryptolocker', 'matsnu', 'suppobox', 'murofet', 'dyre','normal']
     '''
     #special
-    #support_class = ['qadars']
-    #val_class = ['ramnit', 'banjori', 'pykspa', 'gameover', 'locky', 'necurs', 'normal', 'ranbyus', 'emotet', 'murofet']
-    support_class = names[:support_class_num]
-    val_class = names[support_class_num:]
+    support_class = ['fobber', 'bigviktor', 'ramnit', 'shiotob', 'ranbyus', 'banjori', 'gameover', 'shifu', 'symmi', 'padcrypt', 'nymaim','rovnix', 'dircrypt', 'necurs', 'simda', 'qadars', 'feodo', 'bamital', 'enviserv', 'chinad']
+    val_class = ['pykspa', 'emotet', 'conficker', 'locky', 'cryptolocker', 'matsnu', 'suppobox', 'murofet', 'dyre','normal']
+    #support_class = names[:support_class_num]
+    #val_class = names[support_class_num:]
+    #print(support_class)
+    #print(val_class)
     train_data = []
     test_data = []
     i = 0
@@ -119,6 +164,9 @@ def split_train_test_2():
             change_token.append((i, _[1]))
         random.shuffle(change_token)
         new_token = change_token[:door_number]
+        if door_number>len(change_token):
+            append_new_token = change_token[:(door_number-len(change_token))]
+            new_token.extend(append_new_token)
         test_data.extend(new_token)
         i = i + 1
         f.close()
@@ -134,25 +182,7 @@ def split_train_test_2():
 
     return train_data, test_data, (class_limit-support_class_num)
 
-def collate_fn(batch):
-    left_lens = [i['left'].shape[0] for i in batch]
-    right_lens = [i['right'].shape[0] for i in batch]
-    bsz, max_right_len, max_left_len = len(batch),  max(right_lens), max(left_lens)
 
-    # #22是手算cnn的最小输入长度，不然会报错
-    # if max_left_len < 22:
-    #     max_left_len = 22
-    # if max_right_len < 22:
-    #     max_right_len = 22
-    left_tensor = torch.zeros(bsz, max_left_len, dtype=torch.long)
-    right_tensor = torch.zeros(bsz, max_right_len, dtype=torch.long)
-    label_tensor = torch.Tensor([i['label'] for i in batch])
-
-    for b_ix, b in enumerate(batch):
-        left_tensor[b_ix, :b['left'].shape[0]] = b['left'].unsqueeze(0)
-        right_tensor[b_ix, :b['right'].shape[0]] = b['right'].unsqueeze(0)
-
-    return left_tensor, right_tensor, label_tensor
 
 class Pair_Loader(Dataset):
     def __init__(self, data, base_num):
