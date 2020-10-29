@@ -35,6 +35,7 @@ def process_normal_data(path,normal_num):
 
 #生成字符字典
 def char_diction(path):
+    #注意0是留给padding的
     if os.path.isfile("dictionary.pkl"):
         f = open("dictionary.pkl",'rb')
         char_dict = pickle.load(f)

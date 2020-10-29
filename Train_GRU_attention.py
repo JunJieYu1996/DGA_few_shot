@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, RandomSampler
-from torch.nn.utils.rnn import pack_padded_sequence,pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn.functional as F
 import pickle
 
 import sys
@@ -14,18 +15,21 @@ from plot_drawer import  *
 
 #最简单的lstm多分类器，用10类dga，每类80个样本做训练，用剩下的20个做测试
 
-class My_LSTM(nn.Module):
+class My_biGRU(nn.Module):
     def __init__(self, vocab_size:int, class_num:int):
         super().__init__()
         self.vocab_size = vocab_size
         self.class_num = class_num
         self.embed_dim = 128
         self.hidden_dim = 128
+        self.attention_dim = 256
         self.embed = nn.Embedding(self.vocab_size, self.embed_dim)
         self.dense_dropout = nn.Dropout(p=0.5)
-        self.lstm = nn.LSTM(self.embed_dim,self.hidden_dim)
-        self.dense = nn.Linear(in_features=128, out_features=self.class_num)
+        self.GRU = nn.GRU(self.embed_dim,self.hidden_dim, bidirectional=True)
+        self.dense = nn.Linear(in_features=256, out_features=self.class_num)
+        self.attention_dense = nn.Linear(in_features=self.hidden_dim*2, out_features=self.attention_dim)
         self.softmax = nn.Softmax()
+        self.u = torch.nn.Parameter(torch.randn(self.attention_dim, 1))
 
     def _encode_and_pool(self, x, encoder):
         i = encoder(x)
@@ -37,13 +41,38 @@ class My_LSTM(nn.Module):
 
         return x
 
+    def padding_mask(self, seq_k, len):
+        # seq_k形状是[B,L]
+        # `PAD` is 0
+        pad_mask = seq_k.eq(0)
+        pad_mask = pad_mask[:,:len].unsqueeze(-1)  # shape [B, L_q, L_k]
+        return pad_mask
+
+    def Attention(self, inputs, attention_size, attn_mask=None):
+        inputs = inputs.permute(1, 0, 2)
+        batch_size = inputs.shape[0]
+        u = self.u.expand(batch_size,attention_size, 1)
+        v = self.attention_dense(inputs)
+        attention = torch.bmm(v,u)
+        if attn_mask is not None:
+            # 给需要mask的地方设置一个负无穷
+        	attention = attention.masked_fill_(attn_mask, -np.inf)
+        attention = F.softmax(attention, dim=1)
+        attention_out = torch.sum(v*attention, dim=1)
+        #print("attention_out done")
+        return attention_out
+
     def forward(self, x, lens):
         embedding = self.embed(x).permute(1, 0, 2)
-        x_embed = pack_padded_sequence(embedding, lens,enforce_sorted=False)
+        x_embed = pack_padded_sequence(embedding, lens, enforce_sorted=False)
         # Run encoder
-        _ , (final_hidden_state, _ ) = self.lstm(x_embed)
-        final_hidden_state = final_hidden_state[0]
-        softmax_out = self.softmax(self.dense(self.dense_dropout(final_hidden_state)))
+        outputs, final_hidden_state = self.GRU(x_embed)
+        outputs = pad_packed_sequence(outputs)[0]
+        ###attention
+        attention_mask = self.padding_mask(x, max(lens))
+        attention_out = self.Attention(outputs, 256, attention_mask)
+        ####attention
+        softmax_out = self.softmax(self.dense(self.dense_dropout(attention_out)))
         #check = torch.sum(softmax_out,dim=1)
         return softmax_out
 
@@ -53,15 +82,17 @@ class Trainer:
         self.criterion = nn.CrossEntropyLoss()
         self.train_data = train_data
         self.test_data = test_data
-        self.batch_size = 32
+        self.batch_size = 3
         self.char_size = char_size
         self.class_num = class_num
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.train_loader = None
         self.test_loader = None
         self._setup_data()
-        self.model = My_LSTM(vocab_size=self.char_size, class_num=self.class_num).to(self.device)
+        self.model = My_biGRU(vocab_size=self.char_size, class_num=self.class_num).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        for name, parameters in self.model.named_parameters():
+            print(name, ':', parameters.size())
 
     def _setup_data(self):
         train_set,order_test_set = self.train_data,self.test_data
@@ -115,7 +146,7 @@ class Trainer:
                 tl, pl = p.tolist()
                 cmt[tl, pl] = cmt[tl, pl] + 1
 
-            plot_confusion_matrix(cmt,[i for i in range(10)], name="normal_lstm")
+            plot_confusion_matrix(cmt,[i for i in range(10)], name="normal_biGRU_attention")
 
         return metrics.accuracy_score(np.asarray(y_true), np.asarray(y_pred))
 

@@ -182,8 +182,6 @@ def split_train_test_2():
 
     return train_data, test_data, (class_limit-support_class_num)
 
-
-
 class Pair_Loader(Dataset):
     def __init__(self, data, base_num):
         self.labs_to_sample = []

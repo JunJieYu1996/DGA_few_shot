@@ -27,6 +27,6 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix'
     plt.xlabel('Predicted label')
     #plt.show()
 
-    plt.savefig(name + "cmt.png")
+    plt.savefig(name + "_cmt.png")
     print("saving plot")
     plt.close()

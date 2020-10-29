@@ -14,7 +14,7 @@ from plot_drawer import  *
 
 #最简单的lstm多分类器，用10类dga，每类80个样本做训练，用剩下的20个做测试
 
-class My_LSTM(nn.Module):
+class My_biGRU(nn.Module):
     def __init__(self, vocab_size:int, class_num:int):
         super().__init__()
         self.vocab_size = vocab_size
@@ -23,8 +23,8 @@ class My_LSTM(nn.Module):
         self.hidden_dim = 128
         self.embed = nn.Embedding(self.vocab_size, self.embed_dim)
         self.dense_dropout = nn.Dropout(p=0.5)
-        self.lstm = nn.LSTM(self.embed_dim,self.hidden_dim)
-        self.dense = nn.Linear(in_features=128, out_features=self.class_num)
+        self.GRU = nn.GRU(self.embed_dim,self.hidden_dim, bidirectional=True)
+        self.dense = nn.Linear(in_features=256, out_features=self.class_num)
         self.softmax = nn.Softmax()
 
     def _encode_and_pool(self, x, encoder):
@@ -39,11 +39,12 @@ class My_LSTM(nn.Module):
 
     def forward(self, x, lens):
         embedding = self.embed(x).permute(1, 0, 2)
-        x_embed = pack_padded_sequence(embedding, lens,enforce_sorted=False)
+        x_embed = pack_padded_sequence(embedding, lens, enforce_sorted=False)
         # Run encoder
-        _ , (final_hidden_state, _ ) = self.lstm(x_embed)
-        final_hidden_state = final_hidden_state[0]
-        softmax_out = self.softmax(self.dense(self.dense_dropout(final_hidden_state)))
+        outputs, final_hidden_state = self.GRU(x_embed)
+        final_hidden_state = final_hidden_state.permute(1, 0, 2)
+        final_hidden_state_reshape = final_hidden_state.reshape(-1, 2 * self.hidden_dim)
+        softmax_out = self.softmax(self.dense(self.dense_dropout(final_hidden_state_reshape )))
         #check = torch.sum(softmax_out,dim=1)
         return softmax_out
 
@@ -60,7 +61,7 @@ class Trainer:
         self.train_loader = None
         self.test_loader = None
         self._setup_data()
-        self.model = My_LSTM(vocab_size=self.char_size, class_num=self.class_num).to(self.device)
+        self.model = My_biGRU(vocab_size=self.char_size, class_num=self.class_num).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
     def _setup_data(self):
@@ -115,7 +116,7 @@ class Trainer:
                 tl, pl = p.tolist()
                 cmt[tl, pl] = cmt[tl, pl] + 1
 
-            plot_confusion_matrix(cmt,[i for i in range(10)], name="normal_lstm")
+            plot_confusion_matrix(cmt,[i for i in range(10)], name="normal_biGRU")
 
         return metrics.accuracy_score(np.asarray(y_true), np.asarray(y_pred))
 

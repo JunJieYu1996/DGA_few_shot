@@ -251,7 +251,7 @@ class Encoder(nn.Module):
         self.encoder_layers = nn.ModuleList(
           [EncoderLayer(model_dim, num_heads, ffn_dim, dropout) for _ in
            range(num_layers)])
-        self.softmax = nn.Sigmoid()
+        self.sigmoid = nn.Sigmoid()
         self.dense = nn.Linear(in_features=self.max_seq_len*self.model_dim, out_features=1)
         self.dense_dropout = nn.Dropout(p=0.5)
         self.seq_embedding = nn.Embedding(vocab_size, model_dim)
@@ -273,5 +273,5 @@ class Encoder(nn.Module):
             output = self.dense(self.dense_dropout(output))
         except RuntimeError:
             print(output.size())
-        output = self.softmax(output)
+        output = self.sigmoid(output)
         return output, attentions

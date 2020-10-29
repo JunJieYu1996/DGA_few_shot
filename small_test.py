@@ -1,4 +1,12 @@
-a = [1,2,3,4,5,6,7,8,9,10]
-b = a[:15]
-print(b)
+import tensorflow as tf
+import torch
 
+print("aaa")
+a = torch.tensor([[1,2],[3,4]])
+b = torch.tensor([[1],[5]])
+
+c = a.resize_(1,2)
+
+d=torch.sum(c,dim=0)
+
+print("123")
